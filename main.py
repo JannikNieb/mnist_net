@@ -5,10 +5,10 @@ mne = MNISTExtractor()
 nn = mnist_net()
 
 # print colored headline
-print("""          ---Welcome to---
+print("\n" + """"          ---Welcome to---
 A NEURAL NET RECOGNISING HANDWRITTEN DIGITS
     ---based on the MNIST dataset--- 
-""" )
+""")
 
 nn.generate_weights()
 
@@ -25,7 +25,7 @@ while True:
     else:
         print("\033[2;31;40m" + "Error: Not that many training images available!" + "\033[0m")
 
-print("Loading {} MNIST training images".format(custom_image_count))
+print("Loading {} MNIST training images...".format(custom_image_count))
 train_images = mne.extractImages("data/train_images.bin", custom_image_count + 1)
 
 epochs = int(round(float(input("How many epochs should be executed? > "))))
@@ -43,13 +43,21 @@ for epoch in range(epochs):
     print("Epoch {}:    error:{}".format(epoch + 1, train_error))
 
 # testing the net on the MNIST test data sets
-print("\n" + "--test--")
-test_error = 0
-test_labels = mne.extractLabels("data/test_labels.bin")
-print("There are {} test images available.".format(len(test_labels)))
-custom_test_image_count = int(round(float(input("Enter the number of images you would like to load? > "))))
-test_images = mne.extractImages("data/test_images.bin", custom_test_image_count)
-for i in range(custom_test_image_count):
-    test_error = nn.predict(test_labels[i], test_images[i], test_error)
+while True:
+    user_in = input("Would you like to test your neural net on the MNIST test dataset? (y/n) > ")
+    if user_in == "y":
+        print("\n" + "--test--")
+        test_error = 0
+        test_labels = mne.extractLabels("data/test_labels.bin")
+        print("There are {} test images available.".format(len(test_labels)))
+        custom_test_image_count = int(round(float(input("Enter the number of images you would like to load? > "))))
+        test_images = mne.extractImages("data/test_images.bin", custom_test_image_count)
+        for i in range(custom_test_image_count):
+            test_error = nn.predict(test_labels[i], test_images[i], test_error)
+        break
+    elif user_in == "n":
+        break
+    else:
+        print("\033[2;31;40m" + "Error: Invalid input! Enter either 'y' to continue or 'n' to quit" + "\033[0m")
 
 print("error:", test_error)
