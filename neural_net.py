@@ -56,7 +56,7 @@ class MnistNet:
         outputs.append(self.sig(np.dot(np.transpose(outputs[0]), self.who)))  # Oresult
         return outputs
 
-    def calculate_misses(self, labels, images, error):
+    def calculate_accuracy(self, labels, images, image_count):
         """
         Calculates the number of wrong predictions of the net
         :param labels: Integer
@@ -64,9 +64,12 @@ class MnistNet:
         :param error: Integer = 0
         :return:
         """
-        target = labels
-        prediction_list = list(self.execute(images)[1])  # activations of the output layer
-        prediction = prediction_list.index(max(prediction_list))  # node with the highest activation
-        if target != prediction:
-            error += 1
-        return error
+        error = 0
+        for i in range(image_count):
+            target = labels[i]
+            prediction_list = list(self.execute(images[i])[1])  # activations of the output layer
+            prediction = prediction_list.index(max(prediction_list))  # node with the highest activation
+            if target != prediction:
+                error += 1
+            accuracy = 100 - (error / image_count * 100)
+        return error, accuracy

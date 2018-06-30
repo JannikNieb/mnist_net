@@ -43,22 +43,20 @@ for epoch in range(epochs):
         Hresult = nn.execute(train_images[i])[0]
         Oresult = nn.execute(train_images[i])[1]
         nn.backpropagation(train_labels[i], train_images[i], Oresult, Hresult)
-        train_error = nn.calculate_misses(train_labels[i], train_images[i], train_error)
-    print("Epoch {}:    error:{}".format(epoch + 1, train_error))
+    train_error, train_accuracy = nn.calculate_accuracy(train_labels, train_images, custom_image_count)
+    print("Epoch {}:     error: {} {} accuracy: {}%".format(epoch + 1, train_error, " " * abs((7 - len(str(train_error)))), train_accuracy))
 
 # Testing the net on the MNIST test data sets
 while True:
-    user_in = input("Would you like to test your neural net on the MNIST test dataset? (y/n) > ")
+    user_in = input("\n" + "Would you like to test your neural net on the MNIST test dataset? (y/n) > ")
     if user_in == "y":
-        print("\n" + "--test--")
         test_error = 0
         test_labels = mne.extractLabels("data/test_labels.bin")
         print("There are {} test images available.".format(len(test_labels)))
         custom_test_image_count = int(round(float(input("Enter the number of images you would like to load? > "))))
         test_images = mne.extractImages("data/test_images.bin", custom_test_image_count)
-        for i in range(custom_test_image_count):
-            test_error = nn.calculate_misses(test_labels[i], test_images[i], test_error)
-        print("error: ", test_error)
+        test_error, test_accuracy = nn.calculate_accuracy(test_labels, test_images, custom_test_image_count)
+        print("error: {}    accuracy: {}".format(test_error, test_accuracy))
         break
     elif user_in == "n":
         break
