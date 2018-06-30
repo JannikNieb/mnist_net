@@ -1,20 +1,22 @@
 import numpy as np
 
 
-class mnist_net:
+class MnistNet:
 
     def __init__(self, input_nodes=784, hidden_nodes=100, output_nodes=10, learning_rate=1):
         self.iNodes = input_nodes
         self.hNodes = hidden_nodes
         self.oNodes = output_nodes
         self.lRate = learning_rate
-        self.wih = []
-        self.who = []
+        # initializing two matrices, randomized according to the gaussian normal distribution
+        np.random.seed(0)
+        self.wih = np.random.normal(0.0, pow(self.iNodes, -0.5), (self.iNodes, self.hNodes))
+        self.who = np.random.normal(0.0, pow(self.hNodes, -0.5), (self.hNodes, self.oNodes))
 
     def sig(self, x, deriv=False):
         """
         sigmoid function, which is used to normalize values (bring them between 0 and 1)
-        :param x: Int/Float
+        :param x: Float
         :param deriv: Boolean
         :return: Float
         """
@@ -23,23 +25,13 @@ class mnist_net:
         elif deriv:
             return x * (1 - x)
 
-    def generate_weights(self):
-        """
-        generates 2 weight matrices, randomized according to the gaussian normal distribution
-        :return:
-        """
-        np.random.seed(0)
-        self.wih = np.random.normal(0.0, pow(self.iNodes, -0.5), (self.iNodes, self.hNodes))
-        self.who = np.random.normal(0.0, pow(self.hNodes, -0.5), (self.hNodes, self.oNodes))
-        return
-
     def backpropagation(self, labels, input, Oresult, Hresult):
         """
-
-        :param labels:
-        :param input:
-        :param Oresult:
-        :param Hresult:
+        adjusts the weights to minimize the error of the output- and hidden layer
+        :param labels: Integer
+        :param input: np-array (784 dimensions)
+        :param Oresult: np-arrray (10 dimensions)
+        :param Hresult: np-array (hNodes dimensions)
         :return:
         """
         # calculating the error of the net for output and hidden layer
@@ -59,17 +51,22 @@ class mnist_net:
         :param input: 784-dimensional np array
         :return: list of 2 np arrays
         """
-
         outputs = []
         outputs.append(self.sig(np.dot(np.transpose(input), self.wih)))  # Hresult
         outputs.append(self.sig(np.dot(np.transpose(outputs[0]), self.who)))  # Oresult
         return outputs
 
-    def predict(self, labels, images, error):
+    def calculate_misses(self, labels, images, error):
+        """
+        Calculates the number of wrong predictions of the net
+        :param labels: Integer
+        :param images: np-array (784-dimensional)
+        :param error: Integer = 0
+        :return:
+        """
         target = labels
         prediction_list = list(self.execute(images)[1])  # activations of the output layer
         prediction = prediction_list.index(max(prediction_list))  # node with the highest activation
-        # print("target: {}, prediction: {}".format(target, prediction))
         if target != prediction:
             error += 1
         return error
