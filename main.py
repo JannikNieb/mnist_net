@@ -2,63 +2,125 @@ from neural_net import MnistNet
 from mnist_extractor1 import MNISTExtractor
 
 mne = MNISTExtractor()
+foldername = "net_data"
 
-# print colored headline
+# print headline
 print("\n" + """          ---Welcome to---
 A NEURAL NET RECOGNISING HANDWRITTEN DIGITS
     ---based on the MNIST dataset--- 
 """)
 
-# define base parameters of the net
-print("\n" + "Your net concists of 784 input nodes (28 * 28 pixel image) and 10 output nodes (10 numbers).")
-hidden_nodes = int(round(float(input("Enter the number of hidden nodes! > "))))
-learning_rate = float(input("Enter the learning rate! > "))
+print("""
+1) Train a new neural net
+2) Load an already existing neural net file
+""")
 
-nn = MnistNet(hidden_nodes=hidden_nodes, learning_rate=learning_rate)
-
-# Loading the MNIST training data set
-print("\n" + "Loading MNIST training data labels...")
-train_labels = mne.extractLabels("data/train_labels.bin")
-print("Your training set contains", len(train_labels), "images")
-# enter number of training images and only continue if this many training images are actually in the set
 while True:
-    custom_image_count = int(round(float(input("How many images would you like to load? > "))))
-    if custom_image_count <= len(train_labels):
-        break
-    else:
-        print("\033[2;31;40m" + "Error: Not that many training images available!" + "\033[0m")
+    choice = input("Please enter your choice > ")
 
-print("Loading {} MNIST training images...".format(custom_image_count))
-train_images = mne.extractImages("data/train_images.bin", custom_image_count + 1)
+    # Train a new neural net
+    if choice == "1":
+        # define base parameters of the net
+        print("\n" + "Your net concists of 784 input nodes (28 * 28 pixel image) and 10 output nodes (10 numbers).")
+        number_hidden_nodes = int(round(float(input("How many hidden layers would you like to use? > "))))
+        layer_size = [784]
+        for i in range(number_hidden_nodes):
+            layer_size.append(int(round(float(input("Enter the number of hidden nodes for the " + str(i + 1) +
+                                                    ". layer! > ")))))
+        layer_size.append(10)
+        learning_rate = float(input("Enter the learning rate! > "))
 
-# Executing the net
-epochs = int(round(float(input("How many epochs should be executed? > "))))
+        nn = MnistNet(hidden_layer_size=layer_size, learning_rate=learning_rate)
+        nn.generate_weights()
 
-print("\n" + "Executing neural_net")
-print("This could take some time...")
+        # Loading the MNIST training data set
+        print("\n" + "Loading MNIST training data labels...")
+        train_labels = mne.extractLabels("mnist_data/train_labels.bin")
+        # enter number of training images and only continue if this many training images are actually in the set
+        custom_image_count = nn.enter_image_count(len(train_labels))
 
-for epoch in range(epochs):
-    train_error = 0
-    for i in range(custom_image_count - 1):
-        Hresult = nn.execute(train_images[i])[0]
-        Oresult = nn.execute(train_images[i])[1]
-        nn.backpropagation(train_labels[i], train_images[i], Oresult, Hresult)
-    train_error, train_accuracy = nn.calculate_accuracy(train_labels, train_images, custom_image_count)
-    print("Epoch {}:     error: {} {} accuracy: {}%".format(epoch + 1, train_error, " " * abs((7 - len(str(train_error)))), train_accuracy))
+        print("Loading {} MNIST training images...".format(custom_image_count))
+        train_images = mne.extractImages("mnist_data/train_images.bin", custom_image_count + 1)
 
-# Testing the net on the MNIST test data sets
-while True:
-    user_in = input("\n" + "Would you like to test your neural net on the MNIST test dataset? (y/n) > ")
-    if user_in == "y":
+        # -----TRAINING-----
+        epochs = int(round(float(input("How many epochs should be executed? > "))))
+
+        print("\n" + "Executing neural_net")
+        print("This could take some time...")
+        print("without training:    error: {}   accuracy: {}".format(nn.calculate_accuracy(train_labels, train_images,
+                                                                                    custom_image_count), nn.accuracy))
+
+        for epoch in range(epochs):
+            train_error = 0
+            for i in range(custom_image_count - 1):
+                nn.backpropagation(train_labels[i], train_images[i], nn.execute(train_images[i]))
+            train_error = nn.calculate_accuracy(train_labels, train_images, custom_image_count)
+            print("Epoch {}: {} error: {} {} accuracy: {}%".format(epoch + 1, " " * abs(7 - len(str(epoch + 1))),
+                                                    train_error, " " * abs((7 - len(str(train_error)))), nn.accuracy))
+
+        # -----TESTING-----
+        print("\n" + "Testing the trained neural net on the MNIST test data set")
         test_error = 0
-        test_labels = mne.extractLabels("data/test_labels.bin")
-        print("There are {} test images available.".format(len(test_labels)))
-        custom_test_image_count = int(round(float(input("Enter the number of images you would like to load? > "))))
-        test_images = mne.extractImages("data/test_images.bin", custom_test_image_count)
-        test_error, test_accuracy = nn.calculate_accuracy(test_labels, test_images, custom_test_image_count)
-        print("error: {}    accuracy: {}".format(test_error, test_accuracy))
+        test_labels = mne.extractLabels("mnist_data/test_labels.bin")
+        custom_test_image_count = nn.enter_image_count(len(test_labels))
+        test_images = mne.extractImages("mnist_data/test_images.bin", custom_test_image_count)
+        test_error = nn.calculate_accuracy(test_labels, test_images, custom_test_image_count)
+        print("error: {}    accuracy: {}".format(test_error, nn.accuracy))
+
+        # -----SAVING-----
+        # save scores
+        while True:
+            user_in_save_scores = input("\n" + "Would you like to save the score of your neural net? (y/n) > ")
+            if user_in_save_scores == "y":
+                nn.save_json_results(foldername, custom_image_count, epochs, layer_size)
+                print("The scores are accessable by starting table.py in python and then visiting"
+                      "'http://localhost:4000/'")
+
+                # save net
+                user_in_save_net = input("\n" + "Would you also like to save the trained neural net (This allows a "
+                                                "faster usage, without having to train the net again)? (y/n) > ")
+                if user_in_save_net == "y":
+                    nn.save(foldername)
+                    break
+                elif user_in_save_net == "n":
+                    break
+                else:
+                    print("\033[2;31;40m" + "Error: Invalid input! Enter either 'y' to save your net "
+                                            "or 'n' to quit" + "\033[0m")
+
+            elif user_in_save_scores == "n":
+                break
+            else:
+                print("\033[2;31;40m" + "Error: Invalid input! Enter either 'y' to continue or 'n' to quit" + "\033[0m")
         break
-    elif user_in == "n":
+
+    # Load an existing neural net
+    elif choice == "2":
+        nn = MnistNet()
+        filename = foldername + "/" + input("Enter the name of your file (e.g.: 'net3') > ")
+        nn.load(filename)
+
+        # -----TESTING-----
+        print("\n" + "Testing the trained neural net on the MNIST test data set")
+        test_error = 0
+        test_labels = mne.extractLabels("mnist_data/test_labels.bin")
+        custom_test_image_count = nn.enter_image_count(len(test_labels))
+        test_images = mne.extractImages("mnist_data/test_images.bin", custom_test_image_count)
+        test_error = nn.calculate_accuracy(test_labels, test_images, custom_test_image_count)
+        print("error: {}    accuracy: {}".format(test_error, nn.accuracy))
+
+        # -----SAVING-----
+        while True:
+            user_in_save_scores = input("\n" + "Would you like to save the score of your neural net? (y/n) > ")
+            if user_in_save_scores == "y":
+                nn.save_json_results(foldername, custom_image_count, epochs, layer_size)
+                print("The scores are accessable by starting table.py in python and then visiting"
+                      "'http://localhost:4000/'")
+            elif user_in_save_scores == "n":
+                break
+            else:
+                print("\033[2;31;40m" + "Error: Invalid input! Enter either 'y' to continue or 'n' to quit" + "\033[0m")
         break
+
     else:
-        print("\033[2;31;40m" + "Error: Invalid input! Enter either 'y' to continue or 'n' to quit" + "\033[0m")
+        print("Error: Incorrect Input: Enter either '1' or '2'!")
