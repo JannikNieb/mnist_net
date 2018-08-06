@@ -6,23 +6,22 @@ import struct
 
 class MnistNet:
 
-    def __init__(self, input_nodes=784, hidden_layer_size=[], output_nodes=10, learning_rate=1, accuracy=0):
+    def __init__(self, input_nodes=784, hidden_layer_size = [], output_nodes=10, learning_rate=1):
         self.iNodes = input_nodes
         self.hNodes = hidden_layer_size
         self.oNodes = output_nodes
         self.lRate = learning_rate
-        self.accuracy = accuracy
+        self.accuracy_list = []
         self.layers = []
 
     def generate_weights(self):
         """
         generating matrices for every layer, randomized according to the gaussian normal distribution
-        :return: list of np matrices
+        :return: List of np matrices
         """
         np.random.seed(0)
         for i in range(len(self.hNodes) - 1):
             self.layers.append(np.random.normal(0.0, pow(self.hNodes[i], -0.5), (self.hNodes[i], self.hNodes[i + 1])))
-            # self.layers.append(np.random.rand(self.hNodes[i], self.hNodes[i + 1]))
 
     def sig(self, x, deriv=False):
         """
@@ -36,13 +35,11 @@ class MnistNet:
         elif deriv:  # derivative of the sigmoid function (for an already squashed value)
             return x * (1 - x)
 
-    def backpropagation(self, labels, input, results):
+    def backpropagation(self, labels, results):
         """
-        adjusts the weights to minimize the error of the output- and hidden layer
+        adjusts the weights to minimize the error of the hidden layers
         :param labels: Integer
-        :param input: np-array (784 dimensions)
-        :param Oresult: np-arrray (10 dimensions)
-        :param Hresult: np-array (hNodes dimensions)
+        :param results: List of np arrays
         :return:
         """
         # calculating the error of the net for output and hidden layer
@@ -51,6 +48,7 @@ class MnistNet:
         error = target - results[len(self.layers) - 1]  # error of the last layer
         hidden_errors = [error]  # list of all the hidden errors (error of last layer 1st in list!)
         for i in range(len(self.layers) - 1):
+            # calculating the hidden errors by multiplying the error of the 1st layer with the hidden layer matrices
             hidden_errors.append(np.dot(self.layers[len(self.layers) - (i + 1)], error))
             error = hidden_errors[i + 1]
             # adjust weights
@@ -62,21 +60,23 @@ class MnistNet:
         """
         calculate the outputs of the different layers
         :param input: 784-dimensional np array
-        :return: list of np arrays
+        :return: List of np arrays
         """
         outputs = []
+        # multiplying the nput vector with all the hidden layer matrices
         for i in range(len(self.layers)):
-            outputs.append(self.sig(np.dot(input.T, self.layers[i])))  # Hresult
+            outputs.append(self.sig(np.dot(input.T, self.layers[i])))
             input = outputs[i]
         return outputs
 
     def calculate_accuracy(self, labels, images, image_count):
         """
-        Calculates the number of wrong predictions of the net and it´s accuracy
+        Calculates the number of wrong predictions of the net and its accuracy
         :param labels: Integer
         :param images: np-array (784-dimensional)
         :param image_count: Integer
-        :return:
+        :return error: Integer
+        :return accuracy: Float
         """
         error = 0
         for i in range(image_count):
@@ -85,8 +85,9 @@ class MnistNet:
             prediction = prediction_list.index(max(prediction_list))  # node with the highest activation
             if target != prediction:
                 error += 1
-            self.accuracy = 100 - (error / image_count * 100)  # calculate part of right guesses (in percent)
-        return error
+        accuracy = 100 - (error / image_count * 100)  # calculate part of right guesses (in percent)
+        self.accuracy_list.append(accuracy)
+        return error, accuracy
 
     def enter_image_count(self, max):
         """
@@ -107,7 +108,7 @@ class MnistNet:
                 print("\033[2;31;40m" + "Error: Not that many training images available!" + "\033[0m")
         return custom_image_count
 
-    def save_json_results(self, foldername, custom_image_count, epochs, layer_size):
+    def save_json_results(self, foldername, custom_image_count, epochs, layer_size, accuracy):
         """
         saves the score and important parameters of the net in a json-file so they can be displayed with a seperate
         web app (table.py)
@@ -121,7 +122,7 @@ class MnistNet:
         j = len([x for x in os.scandir("net_data") if x.is_file() and x.name.endswith(".json")]) + 1
 
         # dict with all the data to be saved (score + important parameters)
-        data = {"id": j, "accuracy": self.accuracy, "learning_rate": self.lRate, "hidden_layers": len(layer_size) - 2,
+        data = {"id": j, "accuracy": accuracy, "learning_rate": self.lRate, "hidden_layers": len(layer_size) - 2,
                 "trained_images:": custom_image_count, "epochs": epochs}
         for i in range(len(layer_size) - 2):
             data[f"nodes in layer {i + 1}"] = layer_size[i + 1]
@@ -140,14 +141,15 @@ class MnistNet:
         :return:
         """
         # returns number of all previously existing json-files in the folder + 1
-        j = len([x for x in os.scandir("net_data") if x.is_file() and not x.name.endswith(".json")]) + 1
+        j = len([x for x in os.scandir("net_data") if x.is_file() and x.name.endswith(".json")]) + 1
         filename = foldername + f"/net{j}"
+        # writing amount of hidden and number of nodes in each hidden layer to file to allow easy reconstruction
         with open(filename, 'wb') as file:
             file.write(struct.pack('<I', len(self.hNodes)))
             for i in self.hNodes:
                 file.write(struct.pack('<I', i))
 
-            # saving all the (flattened) hidden matrices and a hex-id (according to their position in the net) in a file
+            # saving all the (flattened) hidden matrices in a file
             for i in range(len(self.hNodes) - 1):
                 array = self.layers[i].flatten()
                 file.write(struct.pack('f' * len(array), *array))
@@ -173,3 +175,22 @@ class MnistNet:
 
             file.close()
             return
+
+    def cancel_training(self):
+        """
+        Returns False (und thus cancels the training if no (or negative) improvement occurred over the last 7 epochs
+        :return: Boolean
+        """
+        delta_accuracies = 0
+        if len(self.accuracy_list) >= 10:  # starts checking after 10 epochs
+            # adding the change in the accuracy over the last 7 epochs and returning Fasle if it is less then 0.3
+            for i in range(7):
+                delta_accuracies += self.accuracy_list[len(self.accuracy_list) - (i + 1)] - \
+                                    self.accuracy_list[len(self.accuracy_list) - (i + 2)]
+            if delta_accuracies <= 0.3:
+                print("Training canceled because of no (or negative) improvement in last 7 epochs")
+                return False
+            else:
+                return True
+        else:
+            return True
