@@ -177,9 +177,6 @@ class ConvolutionalNet:
             correction = self.lRate * np.outer((hidden_errors[i] * self.sig(results[len(self.layers) - i], True)),
                                                results[len(self.layers) - (i + 1)]).T
             self.layers[len(self.layers) - (i + 1)] += correction
-            print(correction)
-            print("_______________________")
-            print(self.layers)
         return
 
     def pooling_backprop(self, fc_error, results):

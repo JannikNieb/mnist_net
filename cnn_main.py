@@ -5,8 +5,8 @@ from mnist_extractor1 import MNISTExtractor
 kernel_size = 3  # needs to be uneven!!!
 depth = 3  # int(input("How many kernels should be used? > "))
 fc_size = 2  # int(input("How many fully connected layers should be used? > "))
-learning_rate = 0.3  # input("Enter the learning rate! > ")
-epochs = 3
+learning_rate = float(input("Enter the learning rate! > "))
+epochs = int(round(float(input("How many epochs should be executed? > "))))
 
 
 # initializing the network and the mnist image extractor
@@ -39,5 +39,4 @@ for j in range(epochs):
         # pool_error = cnn.pooling_backprop(cnn.concentration(fc_error), results[len(results) - 3:len(results) - 1:])
         # cnn.convolutional_backprop(pool_error, results[0])
         # print(cnn.convolutional_backprop(pool_error, results[0]))
-    print(epochs, cnn.calculate_accuracy(train_labels, train_images, custom_image_count))
-    print("---")
+    print("accuracy: ", cnn.calculate_accuracy(train_labels, train_images, custom_image_count)[1])
