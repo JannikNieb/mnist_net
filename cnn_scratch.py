@@ -14,7 +14,8 @@ class ConvolutionalNet:
 
     def sig(self, x, deriv=False):
         """
-        sigmoid activation function, which is used to normalize values (bring them between 0 and 1)
+        sigmoid activation function, which is used to normalize values (bring them between 0 and 1) in the
+        fully-connected layer
         :param x: Float
         :param deriv: Boolean
         :return: Float
@@ -26,8 +27,8 @@ class ConvolutionalNet:
 
     def generate_zero_padding(self, input_matrix):
         """
-        generate a padding with the value 0.0 around the outside of the image matrix to keep its size after the
-        convolutional layer constant
+        generate a padding with the value 0.0 around the outside of the image matrix to keep its size constant after the
+        convolutional layer
         :param input_matrix: np.matrix containing 28 * 28 Mnist image
         :return: np. matrix of original image with layer of zeros around the edges
         """
@@ -38,7 +39,8 @@ class ConvolutionalNet:
 
     def relu(self, input, deriv):
         """
-        activition function which returns a zero if the value is < 0 and the same value if it is > 0
+        activition function which is used after the convolutional layer. It returns a zero if the value is < 0 and
+        the same value if it is > 0
         :param input: np.matrix
         :return: np.matrix of same size
         """
@@ -52,12 +54,12 @@ class ConvolutionalNet:
         if not deriv:
             output = max([0, input])
         else:
-            output = np.greater(input, 0).astype(int)
+            output = np.greater(input, 0).astype(int)  # returns a 1 if the input is greater than zero and a zero otherwise
         return output
 
     def conv_layer(self, input_matrix, iteration):
         """
-        convolutional layer of the network (padding = 0, stride = 1)
+        convolutional layer of the network (stride = 1)
         :param input_matrix: np.matrix with zero padding
         :param iteration: integer: number of the kernel
         :return: np.matrix of size 28 * 28
@@ -102,7 +104,31 @@ class ConvolutionalNet:
                 # output[x, y] = np.max(output[x, y], input_matrix[x + i, y + j])
         return output
 
+    def concentraation(self, input, backward=False):
+        """
+        reformation of the list of matrices to a vector before the fully-connected layer/ otherwise in backpropagation
+        :param input: list of matrices/ np.array
+        :param backward:
+        :return:
+        """
+        output = []
+        if not backward:
+            for i in range(self.depth):
+                output.extend(input[i].flatten())
+            output = np.array(output)
+        elif backward:
+            output = np.array_split(input, self.depth)  # returns list of np.arrays
+        return output
+
     def initialitze_fully_conected(self, fc_size, input_image_size):
+        """
+        initializing the layers of the fully connected layer. The size of the first fc layer is equal to the size of
+        the MNIST image divided by 2 (because of the pooling), the hidden layers all have size 100 * 100 and the output
+        layer has size 100 * 10 (for a output of the 10 numbers)
+        :param fc_size: int: Number of hidden layers to be generated
+        :param input_image_size: int: size of the image(before pooling)
+        :return:
+        """
         np.random.seed(0)
         layer_size = self.depth * int(np.sqrt(input_image_size) / 2) ** 2
         # generating a transition layer, a user defined number of hidden layers of size 100 * 100 and an output layer
@@ -112,6 +138,14 @@ class ConvolutionalNet:
         self.layers.append(np.random.randn(100, 10))
 
     def fully_connected(self, input_matrix):
+        """
+        flattens and adds together the matrixes resulting from the last pooling step to one vector and then multiplies
+        the vector step by step with all the weigth matrices
+        :param input_matrix: list of np.matrices
+        :return:
+        """
+        # step left out because no convolutional layer is applied
+        # image = concentration(input_matrix)
         """image = []
         for i in range(self.depth):
             image.extend(input_matrix[i].flatten())
@@ -126,8 +160,8 @@ class ConvolutionalNet:
 
     def fc_backprop(self, labels, results):
         """
-        adjusts the weights to minimize the error of the hidden layers
-        :param labels: Integer
+        adjusts the weights to minimize the error of the hidden layers by using gradient descend
+        :param labels: int: correct labels of the training images
         :param results: List of np arrays
         :return:
         """
@@ -140,28 +174,23 @@ class ConvolutionalNet:
             hidden_errors.append(np.dot(self.layers[len(self.layers) - (i + 1)], error))
             error = hidden_errors[i + 1]
             # adjust weights
-            correction = self.lRate * np.outer((hidden_errors[i] * self.sig(results[len(self.layers) - (i)], True)),
+            correction = self.lRate * np.outer((hidden_errors[i] * self.sig(results[len(self.layers) - i], True)),
                                                results[len(self.layers) - (i + 1)]).T
-            self.layers[len(self.layers) - (i + 1)] -= correction
+            self.layers[len(self.layers) - (i + 1)] += correction
+            print(correction)
+            print("_______________________")
+            print(self.layers)
         return
 
-        # calculating the error of the net for output and hidden layer
-        """target = [0.0] * 10
-        target[labels] = 1.0  # list of targets (for all nodes zero, but for the actual label of the image)
-        error = target - results[-1]  # error of the last layer
-        hidden_errors = [error]  # list of all the hidden errors (error of last layer 1st in list!)
-        for i in range(len(self.layers) - 1):
-            # calculating the hidden errors by multiplying the error of the 1st layer with the hidden layer matrices
-            hidden_errors.append(np.dot(self.layers[len(self.layers) - (i + 1)], error))
-            error = hidden_errors[i + 1]
-            # adjust weights
-            correction = self.lRate * np.outer((hidden_errors[i] *
-                            self.sig(results[len(self.layers) - (i + 1)], True)), results[len(self.layers) - (i + 2)]).T
-            self.layers[len(self.layers) - (i + 1)] += correction
-        return error"""
-
     def pooling_backprop(self, fc_error, results):
-        fc_error = np.array_split(fc_error, self.depth)
+        """
+        backpropagation of the pooling layer.
+        :param fc_error: np.array: error of the fully-connected layer
+        :param results: results of the forward pass of the pooling layer and the previous one
+        :return: np.array: error after the pooling layer
+        """
+        # recreating the matrices from the
+        # fc_error = np.array_split(fc_error, self.depth)
         input_size = len(results[len(results) - 1][0])
         output_size = 2 * input_size
         pooling_error = [np.zeros((output_size, output_size)) for x in range(self.depth)]
