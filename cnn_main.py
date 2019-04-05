@@ -4,25 +4,26 @@ from mnist_extractor1 import MNISTExtractor
 # defining the parameters of the convolutional net
 kernel_size = 3  # needs to be uneven!!!
 depth = 3  # int(input("How many kernels should be used? > "))
-fc_size = 2  # int(input("How many fully connected layers should be used? > "))
-learning_rate = float(input("Enter the learning rate! > "))
-epochs = int(round(float(input("How many epochs should be executed? > "))))
+fc_size = 1  # int(input("How many fully connected layers should be used? > "))
+learning_rate = 0.1  # float(input("Enter the learning rate! > "))
+epochs = 5  # int(round(float(input("How many epochs should be executed? > "))))
+batch_size = 5
 
 
 # initializing the network and the mnist image extractor
 mne = MNISTExtractor()
-cnn = ConvolutionalNet(kernel_size, depth, learning_rate)
+cnn = ConvolutionalNet(kernel_size, depth, learning_rate, batch_size)
 
 # extracting the training labels and images
 train_labels = mne.extractLabels("mnist_data/train_labels.bin")
-custom_image_count = cnn.enter_image_count(len(train_labels))
+custom_image_count = 20 #  cnn.enter_image_count(len(train_labels))
 train_images = mne.extractImages("mnist_data/train_images.bin", custom_image_count)
 
 image_size = len(train_images[0])
-cnn.initialitze_fully_conected(fc_size, image_size)
+cnn.initialitze_fully_conected(fc_size, image_size, custom_image_count)
 
 for j in range(epochs):
-    for i in range(custom_image_count):
+    for i in range(0, custom_image_count, cnn.batch_size):
         # forward pass
         results = []
         """train_images[i] = train_images[i].reshape(28, 28)  # reshaping the image into a 28 * 28 matrix
@@ -35,7 +36,7 @@ for j in range(epochs):
         results.append(cnn.fully_connected(pooled))"""
         # backpropagation
         # cnn.fc_backprop(train_labels[i], cnn.concentration(cnn.fully_connected(train_images[i])))
-        cnn.fc_backprop(train_labels[i], cnn.fully_connected(train_images[i]))
+        cnn.fc_backprop(train_labels[i], cnn.fully_connected(train_images[i:i + batch_size]))
         # pool_error = cnn.pooling_backprop(cnn.concentration(fc_error), results[len(results) - 3:len(results) - 1:])
         # cnn.convolutional_backprop(pool_error, results[0])
         # print(cnn.convolutional_backprop(pool_error, results[0]))

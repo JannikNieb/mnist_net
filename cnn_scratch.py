@@ -3,7 +3,7 @@ import numpy as np
 
 class ConvolutionalNet:
 
-    def __init__(self, kernel_size, depth, learning_rate):
+    def __init__(self, kernel_size, depth, learning_rate, batch_size):
         # kernels randomized according to normal distribution with mü=0 and sigma=sqrt(number of kernel parameters)
         self.kernel = [np.random.normal(0.0, kernel_size, (kernel_size, kernel_size)) for x in range(depth)]
         self.kernel_size = kernel_size
@@ -11,6 +11,7 @@ class ConvolutionalNet:
         self.layers = []
         self.lRate = learning_rate
         self.pooling_stride = 2
+        self.batch_size = batch_size
 
     def sig(self, x, deriv=False):
         """
@@ -25,6 +26,16 @@ class ConvolutionalNet:
         elif deriv:  # derivative of the sigmoid function (for an already squashed value)
             return x * (1 - x)
 
+    def softmax(self, x):
+        """
+        softmax activision function, which brings all values in the array to a value between 0 and 1. Additionally the
+        sum of the array values is 1
+        :param x: np.array or list
+        :return: list of same size
+        """
+        normalized_array = np.exp(x) / sum(np.exp(x))
+        return list(normalized_array)
+
     def generate_zero_padding(self, input_matrix):
         """
         generate a padding with the value 0.0 around the outside of the image matrix to keep its size constant after the
@@ -37,7 +48,7 @@ class ConvolutionalNet:
         output_matrix[padding_size: -padding_size, padding_size: -padding_size] = input_matrix
         return output_matrix
 
-    def relu(self, input, deriv):
+    def relu(self, input, deriv=False):
         """
         activition function which is used after the convolutional layer. It returns a zero if the value is < 0 and
         the same value if it is > 0
@@ -52,7 +63,10 @@ class ConvolutionalNet:
                 else:
                     output[i, j] = np.greater(input[i, j], 0).astype(int)"""
         if not deriv:
-            output = max([0, input])
+            if type(input) is int:
+                output = max([0, input])
+            else:
+                output = [max(0, x) for x in input]
         else:
             output = np.greater(input, 0).astype(int)  # returns a 1 if the input is greater than zero and a zero otherwise
         return output
@@ -120,11 +134,12 @@ class ConvolutionalNet:
             output = np.array_split(input, self.depth)  # returns list of np.arrays
         return output
 
-    def initialitze_fully_conected(self, fc_size, input_image_size):
+    def initialitze_fully_conected(self, fc_size, input_image_size, image_count):
         """
         initializing the layers of the fully connected layer. The size of the first fc layer is equal to the size of
         the MNIST image divided by 2 (because of the pooling), the hidden layers all have size 100 * 100 and the output
-        layer has size 100 * 10 (for a output of the 10 numbers)
+        layer has size 100 * 10 (for a output of the 10 numbers). The values are normally distributed around 0 with a
+        variance of 1 / sqrt(amount of total images)
         :param fc_size: int: Number of hidden layers to be generated
         :param input_image_size: int: size of the image(before pooling)
         :return:
@@ -132,10 +147,11 @@ class ConvolutionalNet:
         np.random.seed(0)
         layer_size = self.depth * int(np.sqrt(input_image_size) / 2) ** 2
         # generating a transition layer, a user defined number of hidden layers of size 100 * 100 and an output layer
-        self.layers = [np.random.randn(784, 100)]  # layer_size
-        for i in range(fc_size):
-            self.layers.append(np.random.randn(100, 100))
-        self.layers.append(np.random.randn(100, 10))
+        self.layers = [np.random.randn(self.batch_size, 784, 100) * (1 / np.sqrt(image_count))]
+        for j in range(fc_size):
+            self.layers.append(np.random.randn(self.batch_size, 100, 100))
+        self.layers.append(np.random.randn(self.batch_size, 100, 10))
+        return
 
     def fully_connected(self, input_matrix):
         """
@@ -150,12 +166,16 @@ class ConvolutionalNet:
         for i in range(self.depth):
             image.extend(input_matrix[i].flatten())
         image = np.array(image)"""
-        image = np.array(input_matrix)
-        outputs = [image]
+        outputs = [[] for x in range(self.batch_size)]
         # multiplying the input vector with all the hidden layer matrices
-        for i in range(len(self.layers)):
-            outputs.append(self.sig(np.dot(image.T, self.layers[i])))
-            image = outputs[i + 1]
+        for i in range(self.batch_size):
+            image = np.array(input_matrix[i])
+            outputs[i].append(image)
+            for j in range(len(self.layers)):
+                outputs[i].append(self.relu(np.dot(np.array(image).T, self.layers[j][i])))
+                image = outputs[i][j + 1]
+            outputs[i].append(self.softmax(outputs[i][j + 1]))
+        print(outputs)
         return outputs
 
     def fc_backprop(self, labels, results):
@@ -167,16 +187,18 @@ class ConvolutionalNet:
         """
         target = [0.0] * 10
         target[labels] = 1.0  # list of targets (for all nodes zero, but for the actual label of the image)
-        error = target - results[len(self.layers)]  # error of the last layer
-        hidden_errors = [error]  # list of all the hidden errors (error of last layer 1st in list!)
-        for i in range(len(self.layers)):
-            # calculating the hidden errors by multiplying the error of the 1st layer with the hidden layer matrices
-            hidden_errors.append(np.dot(self.layers[len(self.layers) - (i + 1)], error))
-            error = hidden_errors[i + 1]
-            # adjust weights
-            correction = self.lRate * np.outer((hidden_errors[i] * self.sig(results[len(self.layers) - i], True)),
-                                               results[len(self.layers) - (i + 1)]).T
-            self.layers[len(self.layers) - (i + 1)] += correction
+        hidden_errors = [[] for x in range(self.batch_size)]
+        for i in range(self.batch_size):
+            error = target - results[i][len(self.layers)]  # error of the last layer
+            hidden_errors[i].append(error)  # list of all the hidden errors (error of last layer 1st in list!)
+            for j in range(len(self.layers)):
+                # calculating the hidden errors by multiplying the error of the 1st layer with the hidden layer matrices
+                hidden_errors[i].append(np.dot(self.layers[len(self.layers) - (j + 1)][i], error))
+                error = hidden_errors[i][j + 1]
+                # adjust weights
+                correction = self.lRate * np.outer((hidden_errors[i][j] * self.sig(results[i][len(self.layers) - j], True)),
+                                                   results[i][len(self.layers) - (j + 1)]).T
+                self.layers[len(self.layers) - (j + 1)] += correction
         return
 
     def pooling_backprop(self, fc_error, results):
