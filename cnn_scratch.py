@@ -150,7 +150,9 @@ class ConvolutionalNet:
                 output.extend(input[j].flatten())
             output = np.array(output)
         elif backward:
-            output = np.array_split(input, self.depth)  # returns list of np.arrays
+            output = []
+            for i in range(self.batch_size):
+                output.append(np.array_split(input[i][-1], self.depth))  # returns list of np.arrays
         return output
 
     def initialize_fully_connected(self, fc_size, input_image_size, image_count):
@@ -233,7 +235,7 @@ class ConvolutionalNet:
         """
         # recreating the matrices from the
         # fc_error = np.array_split(fc_error, self.depth)
-        input_size = len(results[len(results) - 1][0])
+        input_size = len(results[len(results) - 1][0][0])
         out_size = 2 * input_size
         pooling_error = [[np.zeros((out_size, out_size)) for x in range(self.depth)] for y in range(self.batch_size)]
         for b in range(self.batch_size):
@@ -242,27 +244,30 @@ class ConvolutionalNet:
                     for j in range(0, out_size, self.pooling_stride):
                         for p in range(self.pooling_stride):
                             for q in range(self.pooling_stride):
-                                if results[len(results) - 1][h][int(i / 2), int(j / 2)] == \
-                                        results[len(results) - 2][h][i + p, j + q]:
-                                    pooling_error[b][h][i + p, j + q] = fc_error[h][i + j]
+                                if results[len(results) - 1][b][h][int(i / 2), int(j / 2)] == \
+                                        results[len(results) - 2][b][h][i + p, j + q]:
+                                    pooling_error[b][h][i + p, j + q] = fc_error[b][h][i + j]
         return pooling_error
 
     def convolutional_backprop(self, pooling_error, results):
         output_size = self.kernel_size
-        convolutional_error = [np.zeros((output_size, output_size)) for x in range(self.depth)]
-        for h in range(self.depth):
-            for i in range(self.kernel_size):
-                for j in range(self.kernel_size):
-                    """for p in range(int(-1 * (self.kernel_size - 1) / 2), int((self.kernel_size - 1) / 2)):
-                        for q in range(int(-1 * (self.kernel_size - 1) / 2), int((self.kernel_size - 1) / 2)):
-                            convolutional_error[i, j] = np.rot90(self.kernel[h][i - p, j - q], 2) * pooling_error[h][i, j] * \
-                                                       self.relu(results[0][h], True)"""
-                    sum = 0
-                    for p in range(self.kernel_size - 1):
-                        for q in range(self.kernel_size - 1):
-                            sum += (pooling_error[h][i + p, j + q] * self.relu([results[h][i + p, j + q]], True) * self.kernel[h][i, j])
-                    convolutional_error[h][i, j] = sum
-            self.kernel[h] += convolutional_error[h]
+        convolutional_error = [[np.zeros((output_size, output_size)) for x in range(self.depth)]
+                               for y in range(self.batch_size)]
+        for b in range(self.batch_size):
+            for h in range(self.depth):
+                for i in range(self.kernel_size):
+                    for j in range(self.kernel_size):
+                        """for p in range(int(-1 * (self.kernel_size - 1) / 2), int((self.kernel_size - 1) / 2)):
+                            for q in range(int(-1 * (self.kernel_size - 1) / 2), int((self.kernel_size - 1) / 2)):
+                                convolutional_error[i, j] = np.rot90(self.kernel[h][i - p, j - q], 2) * pooling_error[h][i, j] * \
+                                                           self.relu(results[0][h], True)"""
+                        sum = 0
+                        for p in range(self.kernel_size - 1):
+                            for q in range(self.kernel_size - 1):
+                                sum += (pooling_error[b][h][i + p, j + q] *
+                                        self.relu([results[b][h][i + p, j + q]], True) * self.kernel[h][b][i, j])
+                        convolutional_error[b][h][i, j] = sum
+                self.kernel[h][b] += self.lRate * convolutional_error[b][h]
                             # convolutional_error = pooling_error[h] * np.rot90(self.kernel[h], 2) * self.relu(results[0][h], True)
 
         return convolutional_error
