@@ -4,6 +4,7 @@ import numpy as np
 class ConvolutionalNet:
 
     def __init__(self, kernel_size, depth, learning_rate, batch_size):
+        np.random.seed(0)
         # kernels randomized according to normal distribution with mü=0 and sigma = sqrt(number of kernel parameters)
         self.kernel = [np.random.randn(batch_size, kernel_size, kernel_size) * np.sqrt(kernel_size)
                        for x in range(depth)]
@@ -14,7 +15,7 @@ class ConvolutionalNet:
         self.pooling_stride = 2
         self.batch_size = batch_size
 
-    def relu(self, input, deriv=False):
+    def relu(self, x, deriv=False):
         """
         activation function which is used after the convolutional layer. It returns a zero if the value is < 0 and
         the same value if it is > 0
@@ -23,24 +24,11 @@ class ConvolutionalNet:
         :return: Float
         """
         if not deriv:  # normal ReLU function
-            output = max([0, input])
+            output = max([0, x])
         elif deriv:  # derivative of the ReLU function
             # returns a 1 if the input is greater than zero and a zero otherwise
-            output = float(np.greater(input, 0).astype(int))
+            output = float(np.greater(x, 0).astype(int))
         return output
-
-    def sig(self, x, deriv=False):
-        """
-        sigmoid activation function, which is used to normalize values (bring them between 0 and 1) in the
-        fully-connected layer
-        :param x: Float
-        :param deriv: Boolean
-        :return: Float
-        """
-        if deriv == False:  # normal sigmoid function
-            return 1 / (1 + np.exp(-x))
-        elif deriv:  # derivative of the sigmoid function (for an already squashed value)
-            return x * (1 - x)
 
     def softmax(self, x, deriv=False):
         """
@@ -53,7 +41,14 @@ class ConvolutionalNet:
         if not deriv:  # normal softmax function
             return list(np.exp(x) / sum(np.exp(x)))
         elif deriv:  # derivative of the softmax function (for an already squashed value)
-            return np.array(x) * (1 - np.array(x))
+            Jacobian = np.zeros((len(x), len(x)))
+            for i in range(len(x)):
+                for j in range(len(x)):
+                    if i ==j:
+                        Jacobian[i, j]= x[i] * (1 - x[i])
+                    elif i != j:
+                        Jacobian[i, j] = -x[j] * x[i]
+            return np.dot(x, Jacobian)
 
     def tanh(self, x, deriv=False):
         """
@@ -98,14 +93,14 @@ class ConvolutionalNet:
         for c in range(self.batch_size):
             for x in range(self.depth):
                 # k, h for scanning over the input matrix
-                for k in range(output_size):
-                    for h in range(output_size):
+                for m in range(output_size):
+                    for n in range(output_size):
                         # j, i as iterators for Frobenius inner product (here: inner_sum)
                         inner_sum = 0
-                        for j in range(self.kernel_size - 1):
-                            for i in range(self.kernel_size - 1):
-                                    inner_sum += (input_matrix[c][k + j, h + i] * self.kernel[x][c, j, i])
-                        output[c][x][k, h] = self.relu(inner_sum, False)
+                        for i in range(self.kernel_size - 1):
+                            for j in range(self.kernel_size - 1):
+                                    inner_sum += (input_matrix[c][m + i, n + j] * self.kernel[x][c, i, j])
+                        output[c][x][m, n] = self.relu(inner_sum, False)
         return output
 
     def pool(self, inputs):
@@ -115,13 +110,7 @@ class ConvolutionalNet:
         :return: {batch_size} lists each containing {depth} np.matrices of size 14 * 14
         """
         input_size = len(inputs[0][0])
-        # testing if the size of the matrix is dividable by 2/ 3 to determine the stride
-        if input_size % 2 == 0:
-            self.pooling_stride = 2
-        elif input_size % 3 == 0:
-            self.pooling_stride = 3
-        else:
-            print("matrix of uneven length: no pooling possible")
+        self.pooling_stride = 2
 
         output_size = int(input_size / self.pooling_stride)
         output = [[np.zeros([output_size, output_size]) for i in range(self.depth)] for j in range(self.batch_size)]
@@ -133,7 +122,8 @@ class ConvolutionalNet:
                         # i, j as iterators for scanning over the pooling field
                         for i in range(self.pooling_stride):
                             for j in range(self.pooling_stride):
-                                output[b][d][int(g / 2), int(h / 2)] = max(output[b][d][int(g / 2), int(h / 2)],
+                                output[b][d][int(g / self.pooling_stride), int(h / self.pooling_stride)] = max(output[b]
+                                                        [d][int(g / self.pooling_stride), int(h / self.pooling_stride)],
                                                                            inputs[b][d][g + i, h + j])
         return output
 
@@ -165,13 +155,12 @@ class ConvolutionalNet:
         :param input_image_size: int: size of the image(before pooling)
         :return:
         """
-        np.random.seed(0)
         layer_size = self.depth * int(np.sqrt(input_image_size) / 2) ** 2
         # generating a transition layer, a user defined number of hidden layers of size 100 * 100 and an output layer
-        self.layers = [np.random.randn(self.batch_size, layer_size, 100) * (1 / np.sqrt(image_count))]
+        self.layers = [np.random.randn(self.batch_size, layer_size, 100) * (1 / np.sqrt(100))]
         for j in range(fc_size):
-            self.layers.append(np.random.randn(self.batch_size, 100, 100))
-        self.layers.append(np.random.randn(self.batch_size, 100, 10))
+            self.layers.append(np.random.randn(self.batch_size, 100, 100) * (1 / np.sqrt(100)))
+        self.layers.append(np.random.randn(self.batch_size, 100, 10) * (1 / np.sqrt(10)))
         return
 
     def fully_connected(self, input_matrix, concentrate=True):
@@ -257,10 +246,6 @@ class ConvolutionalNet:
             for h in range(self.depth):
                 for i in range(self.kernel_size):
                     for j in range(self.kernel_size):
-                        """for p in range(int(-1 * (self.kernel_size - 1) / 2), int((self.kernel_size - 1) / 2)):
-                            for q in range(int(-1 * (self.kernel_size - 1) / 2), int((self.kernel_size - 1) / 2)):
-                                convolutional_error[i, j] = np.rot90(self.kernel[h][i - p, j - q], 2) * pooling_error[h][i, j] * \
-                                                           self.relu(results[0][h], True)"""
                         sum = 0
                         for p in range(self.kernel_size - 1):
                             for q in range(self.kernel_size - 1):
@@ -268,8 +253,6 @@ class ConvolutionalNet:
                                         self.relu([results[b][h][i + p, j + q]], True) * self.kernel[h][b][i, j])
                         convolutional_error[b][h][i, j] = sum
                 self.kernel[h][b] += self.lRate * convolutional_error[b][h]
-                            # convolutional_error = pooling_error[h] * np.rot90(self.kernel[h], 2) * self.relu(results[0][h], True)
-
         return convolutional_error
 
     def enter_image_count(self, max):
